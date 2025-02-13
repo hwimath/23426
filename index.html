@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>다항식 빈출 (9)</title>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+  <style>
+    body { background-color: #fff; color: #000; font-family: sans-serif; }
+    .hidden { display: none; }
+    #energyBarContainer { width: 100%; background: #000; height: 20px; margin: 10px 0; }
+    #energyBar { width: 100%; height: 100%; background: #fff; }
+    button { margin: 5px; padding: 5px 10px; }
+    .option { display: block; margin: 5px 0; padding: 5px; border: 1px solid #000; cursor: pointer; }
+    .selected { background: #ddd; }
+  </style>
+</head>
+<body>
+  <!-- 시작 화면 -->
+  <div id="startScreen">
+    <h1>다항식 빈출 (9)</h1>
+    <p>이름: <input type="text" id="playerName" /></p>
+    <p>난이도 선택:</p>
+    <select id="difficulty">
+      <option value="최상">최상 (20초/문제, 20점)</option>
+      <option value="상">상 (30초/문제, 15점)</option>
+      <option value="중">중 (40초/문제, 13점)</option>
+      <option value="하">하 (시간제한 없음, 10점)</option>
+    </select>
+    <br>
+    <button id="startButton">게임 시작</button>
+  </div>
+
+  <!-- 게임 화면 -->
+  <div id="gameScreen" class="hidden">
+    <div>
+      <span>전체 경과시간: <span id="overallTime">0</span>초</span>
+      &nbsp; | &nbsp;
+      <span>점수: <span id="score">0</span></span>
+      &nbsp; | &nbsp;
+      <span>남은 기회: <span id="lives">3</span></span>
+    </div>
+    <div id="energyBarContainer">
+      <div id="energyBar"></div>
+    </div>
+    <div id="questionContainer"></div>
+    <div id="optionsContainer"></div>
+    <div id="feedback" style="margin-top:10px;"></div>
+    <button id="nextButton" disabled>다음 문제</button>
+  </div>
+
+  <!-- 게임 종료 화면 -->
+  <div id="endScreen" class="hidden">
+    <h2>게임 종료</h2>
+    <p>최종 점수: <span id="finalScore"></span></p>
+    <button id="sendScoreButton">점수전송</button>
+    <pre id="response"></pre>
+  </div>
+
+  <script>
+    // 데이터 전송 함수
+    function saveData(game, name, score, elapsedTime) {
+      const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+      const requestData = {
+        game,
+        name,
+        score: parseInt(score, 10),
+        elapsedTime: parseInt(elapsedTime, 10)
+      };
+      try {
+        const response = fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestData)
+        });
+        response.then(res => res.json()).then(responseData => {
+          if (response.ok) {
+            document.getElementById('response').innerText =
+              `성공: ${JSON.stringify(responseData, null, 2)}`;
+          } else {
+            document.getElementById('response').innerText =
+              `오류: ${JSON.stringify(responseData, null, 2)}`;
+          }
+        });
+      } catch (error) {
+        console.error('요청 실패:', error);
+        document.getElementById('response').innerText =
+          `네트워크 오류: ${error.message}`;
+      }
+    }
+
+    // 배열 섞기 함수
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    // 문제 데이터 (총 10문제)
+    const questionsPool = [
+      // [유형15] 다항식 항등식 문제
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(27x^3 - 3x + 5 = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수 \\(A,\\;B,\\;C,\\;D\\)에 대하여 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["9", "10", "11", "12", "13"],
+        answer: "11"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(54x^3 - 45x^2 + 21x = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수들의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["8", "9", "10", "11", "12"],
+        answer: "10"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(81x^3 - 72x^2 + 33x = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수 \\(A,\\;B,\\;C,\\;D\\)의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["12", "13", "14", "15", "16"],
+        answer: "14"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(27x^3 - 18x^2 + 6x = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수들의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["2", "3", "4", "5", "6"],
+        answer: "4"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(54x^3 - 36x^2 + 12x = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수 \\(A,\\;B,\\;C,\\;D\\)의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["6", "7", "8", "9", "10"],
+        answer: "8"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(27x^3 + 9x^2 -6x + 6 = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수들의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["12", "13", "14", "15", "16"],
+        answer: "14"
+      },
+      {
+        question: "임의의 실수 \\(x\\)에 대하여, 다음 등식이 성립한다. <br>\\(108x^3 -90x^2 +33x -4 = A(3x-1)^3 + B(3x-1)^2 + C(3x-1) + D\\)<br>상수 \\(A,\\;B,\\;C,\\;D\\)의 합 \\(A+B+C+D\\)의 값을 고르시오.",
+        options: ["8", "9", "10", "11", "12"],
+        answer: "10"
+      },
+      // [유형19] 직각삼각형의 빗변 길이 문제
+      {
+        question: "직각삼각형에서, 두 직각변의 곱의 절반이 넓이다. <br>세 변 \\(a,\\;b,\\;c\\)가 다음 조건을 만족할 때: <br>(1) \\(a^2+b^2=c^2\\) <br>(2) \\(a+b+c=14\\) <br>(3) 넓이가 \\(7\\)이다. <br>빗변 \\(c\\)의 길이를 고르시오.",
+        options: ["4", "5", "6", "7", "8"],
+        answer: "6"
+      },
+      {
+        question: "직각삼각형의 세 변 \\(a,\\;b,\\;c\\)가 다음 조건을 만족할 때: <br>(1) \\(a^2+b^2=c^2\\) <br>(2) \\(a+b+c=16\\) <br>(3) 넓이가 \\(16\\)이다. <br>빗변 \\(c\\)의 길이를 고르시오.",
+        options: ["4", "5", "6", "7", "8"],
+        answer: "6"
+      },
+      {
+        question: "직각삼각형의 세 변 \\(a,\\;b,\\;c\\)가 다음 조건을 만족할 때: <br>(1) \\(a^2+b^2=c^2\\) <br>(2) \\(a+b+c=20\\) <br>(3) 넓이가 \\(20\\)이다. <br>빗변 \\(c\\)의 길이를 고르시오.",
+        options: ["6", "7", "8", "9", "10"],
+        answer: "8"
+      }
+    ];
+
+    let questions = []; // 전체 문제 배열 (초기 10문제 후 랜덤 반복)
+    let currentQuestion = null;
+    let currentIndex = 0;
+    let score = 0;
+    let lives = 3;
+    let overallSeconds = 0;
+    let questionTimeLimit = 0; // 초 (하 난이도: 0 = 무제한)
+    let perQuestionTimer = null;
+    let overallTimer = null;
+    let difficulty = "";
+    let scorePerQuestion = 0;
+
+    // 시작하기
+    document.getElementById("startButton").addEventListener("click", startGame);
+    document.getElementById("nextButton").addEventListener("click", nextQuestion);
+    document.getElementById("sendScoreButton").addEventListener("click", function() {
+      const name = document.getElementById("playerName").value || "익명";
+      saveData("다항식 빈출 (수정본)", name, score, overallSeconds);
+    });
+
+    function startGame() {
+      const name = document.getElementById("playerName").value.trim();
+      if (!name) { alert("이름을 입력하세요."); return; }
+      difficulty = document.getElementById("difficulty").value;
+      // 난이도에 따른 시간 제한 및 점수 설정
+      if(difficulty === "최상") { questionTimeLimit = 20; scorePerQuestion = 20; }
+      else if(difficulty === "상") { questionTimeLimit = 30; scorePerQuestion = 15; }
+      else if(difficulty === "중") { questionTimeLimit = 40; scorePerQuestion = 13; }
+      else { questionTimeLimit = 0; scorePerQuestion = 10; } // 하: 무제한
+
+      // 초기 문제 셔플
+      questions = shuffleArray([...questionsPool]);
+      currentIndex = 0; score = 0; lives = 3; overallSeconds = 0;
+      document.getElementById("score").innerText = score;
+      document.getElementById("lives").innerText = lives;
+      document.getElementById("overallTime").innerText = overallSeconds;
+      document.getElementById("startScreen").classList.add("hidden");
+      document.getElementById("gameScreen").classList.remove("hidden");
+      // 전체 타이머 시작
+      overallTimer = setInterval(function() {
+        overallSeconds++;
+        document.getElementById("overallTime").innerText = overallSeconds;
+      }, 1000);
+      loadQuestion();
+    }
+
+    function loadQuestion() {
+      clearInterval(perQuestionTimer);
+      document.getElementById("feedback").innerHTML = "";
+      document.getElementById("nextButton").disabled = true;
+      // 에너지바 초기화 (시간제한이 있을 때만)
+      if(questionTimeLimit > 0) {
+        document.getElementById("energyBar").style.width = "100%";
+        startEnergyBar();
+      } else {
+        document.getElementById("energyBar").style.width = "100%";
+      }
+      // 문제 선택 (모든 문제 소진 후엔 랜덤 반복)
+      if(currentIndex < questions.length) {
+        currentQuestion = questions[currentIndex];
+      } else {
+        currentQuestion = questionsPool[Math.floor(Math.random()*questionsPool.length)];
+      }
+      // 문제 표시
+      document.getElementById("questionContainer").innerHTML = "<p>" + currentQuestion.question + "</p>";
+      // 보기를 섞어서 표시
+      const opts = shuffleArray([...currentQuestion.options]);
+      let optsHTML = "";
+      opts.forEach(function(opt) {
+        optsHTML += "<div class='option'>" + opt + "</div>";
+      });
+      document.getElementById("optionsContainer").innerHTML = optsHTML;
+      // 각 보기에 클릭 이벤트 등록
+      Array.from(document.getElementsByClassName("option")).forEach(function(el) {
+        el.addEventListener("click", function() {
+          if(document.getElementById("nextButton").disabled === false) return;
+          const chosen = el.innerText;
+          if(chosen === currentQuestion.answer) {
+            document.getElementById("feedback").innerHTML = "<p>정답!</p>";
+            score += scorePerQuestion;
+            document.getElementById("score").innerText = score;
+          } else {
+            document.getElementById("feedback").innerHTML = "<p>오답! 정답은 " + currentQuestion.answer + "입니다.</p>";
+            lives--;
+            document.getElementById("lives").innerText = lives;
+            if(lives <= 0) {
+              endGame();
+              return;
+            }
+          }
+          document.getElementById("nextButton").disabled = false;
+          clearInterval(perQuestionTimer);
+          MathJax.typeset();
+        });
+      });
+      MathJax.typeset();
+    }
+
+    function nextQuestion() {
+      currentIndex++;
+      loadQuestion();
+    }
+
+    function startEnergyBar() {
+      let timeLeft = questionTimeLimit;
+      const bar = document.getElementById("energyBar");
+      perQuestionTimer = setInterval(function() {
+        timeLeft -= 0.1;
+        const percent = (timeLeft / questionTimeLimit) * 100;
+        bar.style.width = percent + "%";
+        if(timeLeft <= 0) {
+          clearInterval(perQuestionTimer);
+          document.getElementById("feedback").innerHTML = "<p>시간 초과! 정답은 " + currentQuestion.answer + "입니다.</p>";
+          lives--;
+          document.getElementById("lives").innerText = lives;
+          if(lives <= 0) {
+            endGame();
+            return;
+          }
+          document.getElementById("nextButton").disabled = false;
+          MathJax.typeset();
+        }
+      }, 100);
+    }
+
+    function endGame() {
+      clearInterval(overallTimer);
+      clearInterval(perQuestionTimer);
+      document.getElementById("gameScreen").classList.add("hidden");
+      document.getElementById("endScreen").classList.remove("hidden");
+      document.getElementById("finalScore").innerText = score;
+    }
+  </script>
+</body>
+</html>
